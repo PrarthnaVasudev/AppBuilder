@@ -1,0 +1,165 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+#install.packages('DT')
+library(tidyverse)
+library(readxl)
+library(dbplyr)
+library(reshape2)
+library(shiny)
+library(DT)
+
+#Import dataset for girls baby names
+baby_names_girls<-read_xlsx("Top100_Popular_Baby_Names.xlsx",sheet=1,skip=5,n_max=101)
+
+#import data set for boys baby names
+baby_names_boys<-read_xlsx("Top100_Popular_Baby_Names.xlsx",sheet="Boys' Names",skip=5,n_max=101)
+
+View(baby_names_girls)
+str(baby_names_girls)
+
+#dataframe for girls names
+#remove columns where number of null value cells is greater than 3
+baby_names_girls1<-baby_names_girls[colSums(!is.na(baby_names_girls)) > 3]
+View(baby_names_girls1)
+
+
+#remove 2nd row with null values 
+baby_names_girls2<-baby_names_girls1[-c(1),]
+colnames(baby_names_girls2)
+
+#remove all numeric values from the dataset with the exception of "Rank". Hence we convert "Rank" variable to factor
+baby_names_girls2$X__1<-as.factor(baby_names_girls2$X__1)
+baby_names_girls2 <- baby_names_girls2[,sapply(baby_names_girls2, is.numeric)==FALSE]
+
+#assigning headers to the dataset
+headers<-seq(1954, 2018, by=1)
+colnames(baby_names_girls2)<-c("Rank",headers)
+View(baby_names_girls2)
+
+#transposing/reshaping the dataframe to reflect the years as column values next to the names
+baby_names_girls3<-melt(baby_names_girls2, id=c("Rank"))
+View(baby_names_girls3)
+
+#renaming the variables
+baby_names_girls3<-setNames(baby_names_girls3[1:3],c("Rank","Year","Names"))
+
+
+
+##boys dataset
+baby_names_boys<-read_excel("Top100_Popular_Baby_Names.xlsx",sheet=2,skip=5,n_max=101)
+View(baby_names_boys)
+
+#data frame for boys
+
+#remove columns where number of null value cells is greater than 3
+baby_names_boys1<-baby_names_boys[colSums(!is.na(baby_names_boys))>3]
+View(baby_names_boys1)
+
+#remove 2nd row with null values
+baby_names_boys2<-baby_names_boys1[-c(1),]
+colnames(baby_names_boys2)
+str(baby_names_boys2)
+
+#remove all numeric values from the dataset with the exception of "Rank". Hence we convert "Rank" variable to factor
+baby_names_boys2$X__1<-as.factor(baby_names_boys2$X__1)
+baby_names_boys2 <- baby_names_boys2[,sapply(baby_names_boys2, is.numeric)==FALSE]
+
+#assigning headers to the dataset
+headers<-seq(1954, 2018, by=1)
+colnames(baby_names_boys2)<-c("Rank",headers)
+View(baby_names_boys2)
+
+#transposing/reshaping the dataframe to reflect the years as column values next to the names
+baby_names_boys3<-melt(baby_names_boys2, id=c("Rank"))
+View(baby_names_boys3)
+
+#renaming the variables
+baby_names_boys3<-setNames(baby_names_boys3[1:3],c("Rank","Year","Names"))
+
+str(baby_names_boys3)
+
+
+
+#building shiny apps
+ui<-fluidPage(
+   title="Popularity of baby names as per gender in each year from 1954 to 2018",
+   
+   sidebarLayout(
+     
+     sidebarPanel(
+       conditionalPanel('input.tab=="Top_10_Girls_Names"',
+            selectInput(inputId="Year",
+                   label="Pick the year to know top 10 popular baby names for girls:",
+                   choices=baby_names_girls3$Year,
+                   selected=TRUE
+                )),
+       
+       conditionalPanel('input.tab=="Top_10_Boys_Names"',
+          selectInput(inputId="Year1",
+             label="Pick the year to know the top 10 popular baby names for boys:",
+             choices=baby_names_boys3$Year,
+             selected=TRUE)),
+       
+       conditionalPanel('input.tab=="Popularity_Girls_Name"',
+                        selectInput(inputId="Name",
+                                    label="pick the name to know it's popularity over time:",
+                                    choices=baby_names_girls3$Names,
+                                    selected=TRUE)),
+       
+       conditionalPanel('input.tab=="Popularity_Boys_Name"',
+                       selectInput(inputId="Name1",
+                                   label="pick the name to know it's popularity over time:",
+                                   choices=baby_names_boys3$Names,
+                                   selected=TRUE))
+       ),
+     
+   mainPanel(
+ 
+            tabsetPanel(id='tab',
+                   tabPanel("Top_10_Girls_Names", DT::dataTableOutput('list1')),
+                   tabPanel("Top_10_Boys_Names", DT::dataTableOutput('list2')),
+                   tabPanel("Popularity_Girls_Name",plotOutput("Plot")),                       tabPanel("Popularity_Boys_Name",plotOutput("Plot1"))
+                   
+ )
+ )
+ )
+ )
+ 
+ 
+ server<-function(input,output){
+   output$list1<-DT::renderDataTable({
+     req(input$Year)
+     baby_names_girls3%>%filter(baby_names_girls3$Year==input$Year)%>%select(c("Rank","Names"))%>%head(n=10)%>%DT::datatable(option=list(paging=FALSE))})
+  
+   output$list2<-DT::renderDataTable({
+     req(input$Year1)
+     baby_names_boys3%>%filter(baby_names_boys3$Year==input$Year1)%>%select(c("Rank","Names"))%>%head (n=10)%>%DT::datatable(option=list(paging=FALSE))
+   })
+   
+   output$Plot<-renderPlot({
+   df<-baby_names_girls3%>%filter(baby_names_girls3$Names==input$Name)
+   ggplot(data=df,
+          aes(x=as.numeric(as.character(df$Year)),y=df$Rank,group=1))+
+     geom_line(color="blue")+
+       geom_point()+
+     ggtitle("Trend line showing popularity of name from 1954 to 2018")+
+     labs(x="Year",y="popularity-Rank")
+   }) 
+   
+  output$Plot1<-renderPlot({
+    df1<-baby_names_boys3%>%filter(baby_names_boys3$Names==input$Name1)
+    ggplot(data=df1,
+           aes(x=as.numeric(as.character(df1$Year)),y=df1$Rank,group=1))+ 
+      geom_line(color="blue")+
+      geom_point()+
+      ggtitle("Trend line showing popularity of name from 1954 to 2018")+
+      labs(x="Year",y="popularity-Rank")                     
+  })
+  }
+ 
+ shinyApp(ui=ui,server=server)
+
+```
